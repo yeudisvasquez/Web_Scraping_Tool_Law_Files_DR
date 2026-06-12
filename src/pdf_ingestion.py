@@ -2,7 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 
 def scrape_example():
-    url = "https://databank.worldbank.org/source/gender-statistics#advancedDownloadOptions"
+    url = "https://comunidad.comprasdominicana.gob.do/Public/Tendering/ContractNoticeManagement/Index?currentLanguage=es-DO"
 
     response = requests.get(url)
     
