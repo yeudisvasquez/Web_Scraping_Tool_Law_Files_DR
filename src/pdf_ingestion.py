@@ -1,33 +1,61 @@
-#requests and BeautifulSoup libraries are used to send HTTP requests and parse HTML content, respectively. The os library is used to create directories and manage file paths.
-#Send HHTP request to the website and parse the HTML content to extract PDF links, then download the PDFs and save them to a specified directory.
+# Import requests, BeautifulSoup, and os modules for web scraping and file handling.
 import requests
 from bs4 import BeautifulSoup
 import os
-
-#Function to scrape the website and download PDFs
-def scrape_example():
-    url = "https://comunidad.comprasdominicana.gob.do/Public/Tendering/ContractNoticeManagement/Index?currentLanguage=es-DO"
-    #Send Get request to the URL and store the response in the variable respone
+# Define a function to download a PDF from a URL and save it locally
+def download_pdf(url, filename):
+    print(f"Downloading: {filename}")
+    # Make a GET request to the URL
     response = requests.get(url)
-
-    #Check if the request was successful (status code 200) if not, print and exit the function
+    # Check if the request was successful
     if response.status_code != 200:
-        print("Failes to fetch data")
+        print("Failed:", url)
+        return
+    # Ensure the directory exists
+    os.makedirs("data/raw/pdfs", exist_ok=True)
+
+    path = f"data/raw/pdfs/{filename}"
+
+    with open(path, "wb") as f:
+        f.write(response.content)
+
+    print(f"Saved: {path}")
+
+
+def scrape_pdfs():
+    url = "https://comunidad.comprasdominicana.gob.do/Public/Tendering/ContractNoticeManagement/Index?currentLanguage=es-DO"
+
+    print("Requesting page...")
+
+    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+
+    if response.status_code != 200:
+        print("Failed to load page")
         return
 
-    #Parse the HTML content of the response using BeautifulSoup and store it in the variable soup
-    soup = BeautifulSoup(response.content, 'html.parser')
+    soup = BeautifulSoup(response.text, "html.parser")
 
-    #extract the page title and stor it in the variable
-    title = soup.title.string.text
+    links = soup.find_all("a")
 
-    #Data dictionary (Python dictionary with 2 keys: "title" and "url") to store the title of the page and the URL of the page. The values for these keys are obtained from the title variable and the url variable, respectively.
-    data = {
-        "title": title,
-        "url": url
-    }
-    #print result to the terminal
-    print(data)
-#Run the function when the script is executed (Check if the script is being run directly, not imported as a module)
+    pdf_links = []
+
+    print("Searching PDF links...")
+
+    for link in links:
+        href = link.get("href")
+
+        if href and ".pdf" in href:
+            pdf_links.append(href)
+
+    print(f"Found {len(pdf_links)} PDF links")
+
+    for i, pdf_url in enumerate(pdf_links[:5]):  # limit for testing
+
+        if not pdf_url.startswith("http"):
+            pdf_url = "https://comunidad.comprasdominicana.gob.do" + pdf_url
+
+        download_pdf(pdf_url, f"file_{i}.pdf")
+
+
 if __name__ == "__main__":
-    scrape_example()
+    scrape_pdfs()
