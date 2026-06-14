@@ -1,22 +1,24 @@
-import requests
-from bs4 import BeautifulSoup
-
+import requests # Library to make HTTP requests, to fetch the webpage content.
+from bs4 import BeautifulSoup # Parse HTML content, read and search through.
+# Script to load and inspect the structure of the website. 
+# Inspect all links, buttons, and look for keywords related to downloading files.
+# This is to explore the website to understand how is it built
 # Fetch one detail page to see the structure
-notice_uid = "DO1.NTC.1728053"
+notice_uid = "DO1.NTC.1728053" # Unique identifier.
 url = f"https://comunidad.comprasdominicana.gob.do/Public/Tendering/OpportunityDetail/Index?noticeUID={notice_uid}&isModal=true&asPopupView=true"
-
-session = requests.Session()
+# Fetch the webpage content.
+session = requests.Session() # Create a session to keep the connection open and make multiple requests.
 response = session.get(url, timeout=30)
-response.encoding = 'utf-8'
+response.encoding = 'utf-8' # UTF-8 efor special characters.
 
 print(f"[HTTP] Status: {response.status_code}")
 print(f"[URL] {url}\n")
 
-if response.status_code == 200:
+if response.status_code == 200: # Verify if page loaded successfully so then we can inspect it.
     print("[HTML] First 2000 characters:")
     print(response.text[:2000])
     
-    # Look for specific patterns
+    # Look for specific patterns, link, buttons, and keywords.
     soup = BeautifulSoup(response.content, 'html.parser')
     
     # Find all links
