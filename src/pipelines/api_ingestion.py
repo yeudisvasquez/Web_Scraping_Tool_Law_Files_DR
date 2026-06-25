@@ -8,6 +8,12 @@ load_dotenv()
 API_URL = os.getenv("DGCP_API_URL")
 OUTPUT_JSON_PATH = os.getenv("json_file_path")
 
+if not API_URL:
+    raise ValueError("DGCP_API_URL is missing in .env")
+
+if not OUTPUT_JSON_PATH:
+    raise ValueError("json_file_path is missing in .env")
+
 #Fields to extract from the API response
 FIELDS = [
     "codigo_proceso",
@@ -24,19 +30,22 @@ def fetch_all_procesos():
     page = 0
     all_items = []
 
-    while True:
-        url = f"{API_URL}?page={page}&size=100"
+    #while True:
+    for page in range(0, 50):  # Limit to 50 pages for testing
+        url = f"{API_URL}?page={page}&limit=1000"
+        print(f"[*] Fetching page {page}...")
+
         response = requests.get(url, timeout=30)
-        response.raise_for_status()  # Raise an error for bad responses
+        response.raise_for_status()
         data = response.json()
 
         items = data["payload"]["content"]
-        all_items.extend(items)
 
-        total_pages = data["payload"]["totalPages"]
-        if page >= total_pages - 1:
+        if not items:
+            print("[*] No more pages. Finished.")
             break
 
+        all_items.extend(items)
         page += 1
 
     return all_items
@@ -51,7 +60,7 @@ def main():
 
     print(f"[*] Total procesos fetched: {len(procesos)}")
 
-    filtered_procesos = [extract_fields(proceso) for p in procesos]
+    filtered_procesos = [extract_fields(p) for p in procesos]
 
     #Save to JSON file
     with open(os.path.join(OUTPUT_JSON_PATH, "procesos.json"), "w", encoding="utf-8") as f:
