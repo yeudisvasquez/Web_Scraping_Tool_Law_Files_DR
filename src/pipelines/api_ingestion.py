@@ -2,6 +2,7 @@ import os
 import json
 import requests
 from dotenv import load_dotenv
+import time
 
 load_dotenv()
 
@@ -26,13 +27,14 @@ FIELDS = [
     "duracion_contrato"
 ]
 
+
 def fetch_all_procesos():
     page = 0
     all_items = []
 
     #while True:
-    for page in range(0, 50):  # Limit to 50 pages for testing
-        url = f"{API_URL}?page={page}&limit=1000"
+    for page in range(0, 5):  # Limit to 50 pages for testing
+        url = f"{API_URL}?page={page}&limit=10"
         print(f"[*] Fetching page {page}...")
 
         response = requests.get(url, timeout=30)
@@ -46,13 +48,18 @@ def fetch_all_procesos():
             break
 
         all_items.extend(items)
+
+        time.sleep(1) # Limit API calls to 1 per second
+        
         page += 1
 
     return all_items
 
+
 def extract_fields(proceso):
     "Return only the fields specified in FIELDS"
     return {field: proceso.get(field) for field in FIELDS}
+
 
 def main():
     print("[*] Fetching data from API...")

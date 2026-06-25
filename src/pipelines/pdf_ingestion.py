@@ -1,173 +1,111 @@
-from playwright.sync_api import sync_playwright
-import re
 import os
+import json
+import requests
 from pathlib import Path
 from dotenv import load_dotenv
-import subprocess
+import re
+import time
+
+load_dotenv()
+
+JSON_PATH = os.getenv("json_file_path") #folder where procesos.json is stored
+if not JSON_PATH:
+    raise ValueError("json_file_path is not set in .env")
+DOWNLOAD_DIR = os.getenv("path_download_dir") #folder where PDF files will be downloaded
+if not DOWNLOAD_DIR:
+    raise ValueError("path_download_dir is not set in .env")
+
+JSON_API_URL = os.getenv("DGCP_DOCUMENTS_URL") #API URL to fetch documents
+if not JSON_API_URL:
+    raise ValueError("DGCP_DOCUMENTS_URL is not set in .env")
 
 
-def sanitize_folder_name(name: str) -> str:
-    """
-    Make a safe folder name for Windows / Linux / Azure
-    """
+def sanitize(name: str) -> str:
+    """Sanitize folder name to remove invalid characters and limit length"""
     name = name.strip()
     name = re.sub(r'[\\/:*?"<>|]', '_', name).strip()
     name = re.sub(r'\s+', '_', name)
     return name[:150]
 
 
-def scrape_and_download():
-    """Download files and organize them into per-notice folders"""
+def fetch_document_list(codigo_proceso: str):
+    url = f"{JSON_API_URL}?proceso={codigo_proceso}"
 
-    load_dotenv()
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+    
+        # API returns: { "payload": [ { "url": "...", "nombre": "...", ... } ] }
+        return data["payload"]["content"]
+    except Exception as e:
+        print(f"    [WARN] Could not fetch documents for {codigo_proceso}: {str(e)[:80]}")
+        return []
 
-    download_root = os.getenv("path_download_dir")
-    if not download_root:
-        raise ValueError("path_download_dir is not set in .env")
 
-    Path(download_root).mkdir(parents=True, exist_ok=True)
+def download_files(url: str, folder: Path, filename: str):
+    file_path = folder / filename
 
-    with sync_playwright() as p:
-        # -------------------------
-        # STEP 1: Extract Notice UIDs
-        # -------------------------
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+    for attempt in range(5):
+        try:
+            r = requests.get(url, stream=True, timeout=60)
+            r.raise_for_status()
 
-        page.goto(
-            "https://comunidad.comprasdominicana.gob.do/Public/Tendering/ContractNoticeManagement/Index?currentLanguage=es-DO",
-            timeout=60000
-        )
+            with open(file_path, "wb") as f:
+                for chunk in r.iter_content(8120):
+                    f.write(chunk)
 
-        page.wait_for_load_state("networkidle")
-        page.wait_for_timeout(3000)
-        print("[*] Main page loaded")
+            print(f"    [SAVED] {filename}")
+            return
 
-        click_count = 0
-        max_clicks = 1  # keep small for testing
+        except Exception as e:
+            wait = 2 ** attempt  # exponential backoff: 1,2,4,8,16
+            print(f"    [RETRY {attempt+1}/5] Error: {str(e)[:80]} — waiting {wait}s")
+            time.sleep(wait)
 
-        while click_count < max_clicks:
-            more_items = page.locator(
-                "a", has_text=re.compile(r"ver m[áa]s", re.IGNORECASE)
-            )
+    print(f"    [FAILED] Could not download {filename}")
 
-            if more_items.count() > 0 and more_items.first.is_visible():
-                click_count += 1
-                print(f"[*] Clicking 'ver más' ({click_count}/{max_clicks})")
-                more_items.first.scroll_into_view_if_needed()
-                more_items.first.click()
-                page.wait_for_load_state("networkidle")
-                page.wait_for_timeout(2000)
-            else:
-                break
+def main():
+    procesos_file = Path(JSON_PATH) / "procesos.json"
 
-        notice_uids = []
-        detalle_links = page.locator("a", has_text="DETALLE")
-        total_links = detalle_links.count()
+    if not procesos_file.exists():
+        raise FileNotFoundError(f"procesos.json not found at {procesos_file}")
 
-        print(f"[INFO] Found {total_links} DETALLE links")
+    with open(procesos_file, "r", encoding="utf-8") as f:
+        procesos = json.load(f)
 
-        for i in range(total_links):
-            onclick = detalle_links.nth(i).get_attribute("onclick")
-            if onclick:
-                match = re.search(r"'noticeUID='\s*\+\s*'([^']+)'", onclick)
-                if match:
-                    notice_uids.append(match.group(1).strip())
+    print(f"[*] Loaded {len(procesos)} procesos")
 
-        browser.close()
-        print(f"[INFO] Extracted {len(notice_uids)} notice UIDs")
+    for idx, p in enumerate(procesos, 1):
+        codigo = p["codigo_proceso"]
+        titulo = p["titulo"]
 
-        # ----------------------------------
-        # STEP 2: Download files per notice
-        # ----------------------------------
-        base_url = "https://comunidad.comprasdominicana.gob.do"
-        detail_endpoint = "/Public/Tendering/OpportunityDetail/Index"
+        print(f"\n[{idx}/{len(procesos)}] Processing {codigo}")
+        
+        # Create folder
+        folder_name = sanitize(titulo)
+        folder = Path(DOWNLOAD_DIR) / folder_name
+        folder.mkdir(parents=True, exist_ok=True)
 
-        for idx, notice_uid in enumerate(notice_uids, 1):
-            print(f"\n[{idx}/{len(notice_uids)}] Processing {notice_uid}")
+        # Fetch document list
+        docs = fetch_document_list(codigo) # API call
 
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(accept_downloads=True)
-            page = context.new_page()
+        time.sleep(1) # Limit API calls to 1 per second
 
-            detail_url = (
-                f"{base_url}{detail_endpoint}"
-                f"?noticeUID={notice_uid}&isModal=true&asPopupView=true"
-            )
+        if not docs:
+            print("    [INFO] No documents found")
+            continue
 
-            page.goto(detail_url, timeout=60000)
-            page.wait_for_load_state("networkidle")
-            page.wait_for_timeout(2000)
+        print(f"    [FOUND] {len(docs)} document(s)")
 
-            # ----------------------------------
-            # Extract notice title (folder name)
-            # ----------------------------------
-            try:
-                # Target the 'Request Name:' label specifically and get the adjacent value
-                # using following-sibling to pick up the name displayed on the website.
-                req_name_locator = page.locator("xpath=//*[contains(text(), 'T[íi]tulo:')]").first
-                if req_name_locator.count() > 0:
-                    notice_title = req_name_locator.first.inner_text().strip()
-                else:
-                    # Fallback to header tags if specific label not found
-                    notice_title = page.locator("h1, h2").first.inner_text().strip()
-            except:
-                notice_title = notice_uid
+        # Download each document
+        for doc in docs:
+            file_url = doc["url_documento"]
+            filename = sanitize(doc.get("nombre_documento", "document.pdf"))
+            download_files(file_url, folder, filename)
+            time.sleep(1.2) # Downloads up to 60 files per min
 
-            folder_name = sanitize_folder_name(notice_title)
-            notice_folder = Path(download_root) / folder_name
-            notice_folder.mkdir(parents=True, exist_ok=True)
-
-            print(f"    Folder: {notice_folder}")
-
-            # ----------------------------------
-            # Download files
-            # ----------------------------------
-            download_links = page.locator("a", has_text="Download")
-            download_count = download_links.count()
-
-            if download_count == 0:
-                print("    [INFO] No files found")
-                browser.close()
-                continue
-
-            print(f"    [FOUND] {download_count} file(s)")
-
-            for i in range(download_count):
-                try:
-                    download_links = page.locator("a", has_text="Download")
-                    link = download_links.nth(i)
-
-                    with page.expect_download(timeout=60000) as d:
-                        link.click()
-
-                    download = d.value
-                    filename = download.suggested_filename
-
-                    file_path = notice_folder / filename
-                    counter = 1
-
-                    while file_path.exists():
-                        stem = file_path.stem
-                        suffix = file_path.suffix
-                        file_path = notice_folder / f"{stem}_{counter}{suffix}"
-                        counter += 1
-
-                    download.save_as(file_path)
-                    size_kb = file_path.stat().st_size / 1024
-
-                    print(f"        [SAVED] {file_path.name} ({size_kb:.1f} KB)")
-
-                except Exception as e:
-                    print(f"        [ERROR] {str(e)[:80]}")
-
-            browser.close()
-
-        print("\n" + "=" * 70)
-        print("[DONE] All downloads completed")
-        print(f"Root download directory: {download_root}")
-        print("=" * 70)
-
+    print("\n[DONE] All documents downloaded.")
 
 if __name__ == "__main__":
-    scrape_and_download()
+    main()
