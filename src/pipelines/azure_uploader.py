@@ -49,7 +49,8 @@ def upload_to_adls():
 
     print("\nUpload completed successfully.")
 
-    input(
+    ## Delete local files after confirmation
+    '''input(
         "\nIs all the data loaded to ADL?\n"
         "Press ENTER to permanently delete the local files..."
     )
@@ -70,7 +71,7 @@ def upload_to_adls():
             print(f"Unable to delete {item}: {e}")
 
     print("Local cleanup completed.")
-
+    '''
 
 if __name__ == "__main__":
     upload_to_adls()

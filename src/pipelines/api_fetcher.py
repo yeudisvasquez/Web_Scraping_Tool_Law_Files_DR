@@ -33,7 +33,7 @@ def fetch_all_procesos():
     all_items = []
 
     #while True:
-    for page in range(0, 5):  # Limit to 50 pages for testing
+    for page in range(0, 3000):  # Limit to a certain number of pages to avoid infinite loops
         url = f"{API_URL}?page={page}&limit=10"
         print(f"[*] Fetching page {page}...")
 

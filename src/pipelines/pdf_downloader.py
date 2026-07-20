@@ -57,9 +57,9 @@ def download_files(url: str, folder: Path, filename: str):
 
             print(f"    [SAVED] {filename}")
             return
-
+        # except request to catch errors
         except Exception as e:
-            wait = 2 ** attempt  # exponential backoff: 1,2,4,8,16
+            wait = 2 ** attempt  # exponential backoff: 1,2,4,8,16 #Seconds to wait on each try.
             print(f"    [RETRY {attempt+1}/5] Error: {str(e)[:80]} — waiting {wait}s")
             time.sleep(wait)
 
