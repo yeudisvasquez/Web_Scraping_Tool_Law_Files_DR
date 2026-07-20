@@ -1,17 +1,31 @@
-Web Scraping Tool – Law Files DR 🇩🇴
+# Web Scraping Tool – Law Files DR 🇩🇴
+
+**Automated extraction of public procurement PDFs from Dominican Republic government portal to Azure Data Lake Storage**
 
 Python → Azure Data Lake (via AzCopy)
 
-📌 Project Overview
+---
 
-This project automates the extraction of public procurement PDF documents from the Dominican Republic government procurement portal and stores them in Azure Data Lake Storage for downstream analytics, compliance, or archival use.
+## 📌 Project Overview
 
-The solution follows a real-world data engineering pattern:
+This project automates the extraction of public procurement PDF documents from the Dominican Republic government procurement portal (Compras Dominicana) and stores them in Azure Data Lake Storage for downstream analytics, compliance, audit, and archival use.
 
-Web Scraping (Python) → Local Staging → Azure Data Lake (AzCopy)
+The solution implements a production-ready data engineering pipeline that extracts contract notice documents, stages them locally, and uploads them to cloud storage for further processing and analytics.
 
-🏗️ Architecture (Current Implementation)
-Public Website (https://comunidad.comprasdominicana.gob.do/Public/Tendering/ContractNoticeManagement/Index?currentLanguage=es-DO)
+### Key Features
+- **Automated PDF Extraction**: Downloads contract notice documents from the procurement portal
+- **Dynamic Content Handling**: Uses Playwright to handle JavaScript-rendered pages
+- **Cloud Integration**: Uploads to Azure Data Lake Storage via AzCopy
+- **Scheduled Processing**: Designed to work with Azure Data Factory for weekly automated runs
+- **Duplicate Prevention**: Automatically removes local files after successful cloud upload
+- **Security-First**: Uses SAS tokens and .gitignore for secret management
+
+---
+
+## 🏗️ Architecture & Workflow
+
+```
+Public Website (Compras Dominicana Portal)
       │
       ▼
 Python Web Scraper (requests + BeautifulSoup / Playwright)
@@ -76,3 +90,40 @@ Easy to later integrate with:
 Azure Data Factory
 Databricks
 Synapse Analytics
+
+Steps: 
+      Downloads JSON file from API.
+      Searches for URLs within the JSON files to download the documents in those URLs.
+      Creates a folder on premises for each document and downloads it. 
+      Copies all the documents to Azure Data Lake, programmed by Azure Data Factory to trigger the ETL process on a weekly basis. 
+      Once the azcopy script is ran, the documents uploaded to the cloud are deleted from on premise to avoid duplicates.
+
+
+##Project taking the following direction 
+      
+DGCP API
+        │
+        ▼
+api_ingestion.py
+        │
+        ▼
+Download JSON
+        │
+        ▼
+Extract document URLs
+        │
+        ▼
+Download PDFs
+        │
+        ▼
+Azure Data Lake
+(raw)
+        │
+        ▼
+Azure Data Factory
+        │
+        ▼
+Azure SQL Database
+        │
+        ▼
+Power BI Dashboard
