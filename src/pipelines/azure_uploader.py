@@ -30,7 +30,8 @@ def upload_to_adls():
     print("=" * 70)
     print("Uploading files to Azure Data Lake...")
     print("=" * 70)
-
+    
+    ##azcopy command to upload files to Azure Data Lake(Microsoft Azure Storage)
     command = (
     f'"{azcopy_path}" '
     f'copy "{source}" "{container_url}" --recursive=true'
